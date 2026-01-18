@@ -1,4 +1,4 @@
-const CORS_HEADERS = {
+  const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
@@ -55,6 +55,7 @@ export default {
 
       const paymentData = JSON.parse(paymentDataRaw);
 
+      // Здесь проверка транзакции через TON API
       const toncenterKey = env.TONCENTER_KEY;
 
       const txRes = await fetch(
