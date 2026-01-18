@@ -1,9 +1,9 @@
-    export default {
+          export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // ====== BALANCE ======
+    // GET /balance
     if (request.method === "GET" && path === "/balance") {
       const userId = url.searchParams.get("user_id");
       const balance = await env.BALANCE_KV.get("balance_" + userId);
@@ -12,7 +12,7 @@
       });
     }
 
-    // ====== CREATE PAYMENT ======
+    // POST /create-payment
     if (request.method === "POST" && path === "/create-payment") {
       const body = await request.json();
       const userId = body.user_id;
@@ -24,69 +24,63 @@
 
       const paymentId = "payment_" + Date.now();
 
-      await env.PAYMENTS_KV.put(paymentId, JSON.stringify({
+      const paymentData = {
         user_id: userId,
         amount,
         status: "pending",
         createdAt: Date.now()
-      }));
+      };
+
+      await env.PAYMENTS_KV.put(paymentId, JSON.stringify(paymentData));
 
       return new Response(JSON.stringify({ paymentId }), {
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    // ====== CHECK PAYMENT ======
+    // POST /check-payment
     if (request.method === "POST" && path === "/check-payment") {
       const body = await request.json();
       const paymentId = body.payment_id;
       const txId = body.tx_id;
 
-      const payment = JSON.parse(await env.PAYMENTS_KV.get(paymentId) || "{}");
-
-      if (!payment || payment.status !== "pending") {
-        return new Response(JSON.stringify({ error: "Платёж не найден или уже подтверждён" }), { status: 400 });
+      const paymentDataRaw = await env.PAYMENTS_KV.get(paymentId);
+      if (!paymentDataRaw) {
+        return new Response(JSON.stringify({ error: "Платёж не найден" }), { status: 404 });
       }
 
-      // Проверка транзакции через TON API
-      const tonRes = await fetch(
-        `https://tonapi.io/v2/transactions/${txId}`,
+      const paymentData = JSON.parse(paymentDataRaw);
+
+      // Проверяем через TONCENTER
+      const toncenterKey = env.TONCENTER_KEY;
+
+      const txRes = await fetch(
+        `https://toncenter.com/api/v2/getTransactions?address=UQAFXBXzBzau6ZCWzruiVrlTg3HAc8MF6gKIntqTLDifuWOi&hash=${txId}`,
         {
-          headers: { "X-API-KEY": env.TONAPI_KEY }
+          headers: { "X-API-Key": toncenterKey }
         }
       );
-      const tonData = await tonRes.json();
 
-      // Если транзакция не найдена
-      if (!tonData || !tonData.transaction) {
-        return new Response(JSON.stringify({ error: "Транзакция не найдена" }), { status: 404 });
+      const txJson = await txRes.json();
+
+      if (!txJson.ok || !txJson.result || txJson.result.length === 0) {
+        return new Response(JSON.stringify({ error: "Транзакция не найдена или ещё не подтверждена" }), { status: 400 });
       }
 
-      // Проверяем что перевод был на твой кошелёк и сумма совпадает
-      const tx = tonData.transaction;
-      const to = tx.to;
-      const amount = parseFloat(tx.amount / 1e9);
+      const tx = txJson.result[0];
+      const amountTon = parseFloat(tx.in_msg.value / 1e9);
 
-      if (to !== "UQAFXBXzBzau6ZCWzruiVrlTg3HAc8MF6gKIntqTLDifuWOi") {
-        return new Response(JSON.stringify({ error: "Платёж не на тот кошелёк" }), { status: 400 });
+      if (amountTon < paymentData.amount) {
+        return new Response(JSON.stringify({ error: "Сумма транзакции меньше заявленной" }), { status: 400 });
       }
 
-      if (amount < payment.amount) {
-        return new Response(JSON.stringify({ error: "Сумма меньше заявленной" }), { status: 400 });
-      }
+      const currentBalance = parseFloat(await env.BALANCE_KV.get("balance_" + paymentData.user_id) || "0");
+      const newBalance = currentBalance + paymentData.amount;
 
-      // Увеличиваем баланс
-      const userBalanceKey = "balance_" + payment.user_id;
-      const current = parseFloat(await env.BALANCE_KV.get(userBalanceKey) || "0");
-      const newBalance = current + payment.amount;
+      await env.BALANCE_KV.put("balance_" + paymentData.user_id, newBalance.toString());
+      await env.PAYMENTS_KV.put(paymentId, JSON.stringify({ ...paymentData, status: "paid", txId }));
 
-      await env.BALANCE_KV.put(userBalanceKey, newBalance.toString());
-
-      // Меняем статус платежа
-      payment.status = "paid";
-      await env.PAYMENTS_KV.put(paymentId, JSON.stringify(payment));
-
-      return new Response(JSON.stringify({ ok: true, balance: newBalance }), {
+      return new Response(JSON.stringify({ balance: newBalance }), {
         headers: { "Content-Type": "application/json" },
       });
     }
