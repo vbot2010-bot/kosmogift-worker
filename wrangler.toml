@@ -1,3 +1,11 @@
 name = "kosmogift-worker"
 main = "index.js"
 compatibility_date = "2026-01-01"
+
+[[kv_namespaces]]
+binding = "BALANCE_KV"
+id = "38d9b6811dcc43099a6541bbd09ddc68"
+
+[[kv_namespaces]]
+binding = "PAYMENTS_KV"
+id = "3b02d8520f7d4fa8b3316f5177f21bb6"
