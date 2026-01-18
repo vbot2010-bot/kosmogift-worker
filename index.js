@@ -3,11 +3,23 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    const corsHeaders = {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
+
+    // OPTIONS (важно для CORS)
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders });
+    }
+
     // GET /balance
     if (request.method === "GET" && path === "/balance") {
       const balance = await env.BALANCE_KV.get("balance");
       return new Response(JSON.stringify({ balance: parseFloat(balance || "0") }), {
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
 
@@ -17,7 +29,10 @@ export default {
       const amount = parseFloat(body.amount);
 
       if (!amount || amount < 0.1) {
-        return new Response(JSON.stringify({ error: "Минимум 0.1 TON" }), { status: 400 });
+        return new Response(JSON.stringify({ error: "Минимум 0.1 TON" }), {
+          status: 400,
+          headers: corsHeaders,
+        });
       }
 
       const current = parseFloat(await env.BALANCE_KV.get("balance") || "0");
@@ -26,10 +41,10 @@ export default {
       await env.BALANCE_KV.put("balance", newBalance.toString());
 
       return new Response(JSON.stringify({ ok: true, balance: newBalance }), {
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
 
-    return new Response("Not found", { status: 404 });
+    return new Response("Not found", { status: 404, headers: corsHeaders });
   },
 };
