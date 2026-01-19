@@ -8,7 +8,6 @@ const INVENTORY_KV = INVENTORY_KV
 const DAILY_KV = DAILY_KV
 
 const TONCENTER_KEY = TONCENTER_KEY
-
 const YOUR_WALLET = "UQAFXBXzBzau6ZCWzruiVrlTg3HAc8MF6gKIntqTLDifuWOi"
 
 async function handleRequest(request) {
@@ -134,12 +133,10 @@ async function checkPayment(request) {
 
   const data = JSON.parse(pay)
 
-  // если уже done
   if (data.status === "done") {
     return json({ ok: true, balance: await BALANCE_KV.get(data.user_id) })
   }
 
-  // Проверка транзакций на TONCENTER
   const res = await fetch("https://toncenter.com/api/v2/getTransactions?address=" + YOUR_WALLET + "&limit=50", {
     headers: { "X-API-Key": TONCENTER_KEY }
   })
@@ -149,16 +146,13 @@ async function checkPayment(request) {
 
   const txs = r.result.transactions || []
 
-  // ищем транзакцию с text=payment_id и amount совпадает
   for (const tx of txs) {
     if (!tx.in_msg) continue
-
     const msg = tx.in_msg
 
-    const text = msg.text || ""
+    // TONCENTER: text может быть в msg.text или msg.body
+    const text = msg.text || msg.body || ""
     const value = parseFloat(msg.value) || 0
-
-    // TONCENTER value в нанотоннах
     const tonValue = value / 1e9
 
     if (text === id && tonValue >= amount) {
