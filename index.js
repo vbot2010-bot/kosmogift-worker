@@ -12,7 +12,6 @@ export default {
     if (path === "/add-balance") return addBalance(request, env)
     if (path === "/admin/set-balance") return adminSetBalance(request, env)
 
-    // НОВЫЕ ЭНДПОИНТЫ
     if (path === "/deposit-request") return depositRequest(request, env)
     if (path === "/check-payment") return checkPayment(request, env)
 
@@ -28,7 +27,7 @@ const json = data =>
     }
   })
 
-/* ================== BALANCE ================== */
+/* BALANCE */
 async function getBalance(url, env) {
   const user = url.searchParams.get("user")
   const bal = await env.BALANCE_KV.get(user) || "0"
@@ -43,7 +42,7 @@ async function addBalance(request, env) {
   return json({ ok: true, balance: newBal })
 }
 
-/* ================== DAILY STATUS ================== */
+/* DAILY STATUS */
 async function dailyStatus(url, env) {
   const user = url.searchParams.get("user")
   const last = await env.DAILY_KV.get(user)
@@ -59,7 +58,7 @@ async function dailyStatus(url, env) {
   return json({ ok: true, remaining, last: Number(last) })
 }
 
-/* ================== DAILY ================== */
+/* DAILY */
 async function daily(url, env) {
   const user = url.searchParams.get("user")
   if (!user) return json({ error: "no_user" })
@@ -75,7 +74,7 @@ async function daily(url, env) {
   return json({ ok: true })
 }
 
-/* ================== INVENTORY ================== */
+/* INVENTORY */
 async function inventory(url, env) {
   const user = url.searchParams.get("user")
   const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]")
@@ -106,7 +105,7 @@ async function sellNft(request, env) {
   return json({ ok: true, balance: newBal, inventory: inv })
 }
 
-/* ================== ADMIN SET BALANCE ================== */
+/* ADMIN SET BALANCE */
 async function adminSetBalance(request, env) {
   const secret = request.headers.get("ADMIN_SECRET")
   if (secret !== env.ADMIN_SECRET) {
@@ -118,14 +117,14 @@ async function adminSetBalance(request, env) {
   return json({ ok: true, user, balance: ton })
 }
 
-/* ================== DEPOSIT REQUEST ================== */
+/* DEPOSIT REQUEST */
 async function depositRequest(request, env) {
   const { user, amount } = await request.json()
   await env.DEPOSIT_KV.put(user, JSON.stringify({ amount, created: Date.now() }))
   return json({ ok: true })
 }
 
-/* ================== CHECK PAYMENT ================== */
+/* CHECK PAYMENT */
 async function checkPayment(request, env) {
   const { user } = await request.json()
 
@@ -165,12 +164,9 @@ async function checkPayment(request, env) {
   const already = await env.CREDITED_KV.get(txHash)
   if (already) return json({ ok: false, message: "already_credited" })
 
-  // начисляем баланс
   const bal = Number(await env.BALANCE_KV.get(user) || 0)
   const newBal = bal + amount
   await env.BALANCE_KV.put(user, String(newBal))
-
-  // помечаем tx как использованную
   await env.CREDITED_KV.put(txHash, "1")
 
   return json({ ok: true, balance: newBal })
