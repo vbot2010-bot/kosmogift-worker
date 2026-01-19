@@ -2,7 +2,15 @@ addEventListener("fetch", event => {
   event.respondWith(handleRequest(event.request))
 })
 
-const WALLET_ADDRESS = "UQAFXBXzBzau6ZCWzruiVrlTg3HAc8MF6gKIntqTLDifuWOi";
+const BALANCE_KV = BALANCE_KV;
+const PAYMENTS_KV = PAYMENTS_KV;
+const INVENTORY_KV = INVENTORY_KV;
+const DAILY_KV = DAILY_KV;
+
+const TONCENTER_KEY = TONCENTER_KEY;
+
+// Твой адрес, куда будут приходить TON
+const RECEIVER_ADDRESS = "UQAFXBXzBzau6ZCWzruiVrlTg3HAc8MF6gKIntqTLDifuWOi";
 
 async function handleRequest(request) {
   const url = new URL(request.url);
@@ -99,13 +107,12 @@ async function sellNft(request) {
   return json({ inventory: arr, balance: newBal });
 }
 
-
 // ---------- TON PAYMENT ----------
 
 async function createPayment(request) {
   const body = await request.json();
   const user_id = body.user_id;
-  const amount = body.amount;
+  const amount = parseFloat(body.amount);
 
   const id = "pay_" + Date.now();
 
@@ -123,34 +130,27 @@ async function checkPayment(request) {
   const id = body.payment_id;
   const amount = parseFloat(body.amount);
 
-  const payRaw = await PAYMENTS_KV.get(id);
-  if (!payRaw) return json({ error: "not found" });
+  const pay = await PAYMENTS_KV.get(id);
+  if (!pay) return json({ error: "not found" });
 
-  const data = JSON.parse(payRaw);
+  const data = JSON.parse(pay);
 
   if (data.status === "done") {
-    const bal = await BALANCE_KV.get(data.user_id);
-    return json({ ok: true, balance: parseFloat(bal || 0) });
+    return json({ ok: true });
   }
 
-  // Проверка транзакции на твоём адресе через Toncenter
-  const res = await fetch(
-    `https://toncenter.com/api/v2/getTransactions?address=${WALLET_ADDRESS}&limit=10`,
-    { headers: { "X-API-Key": TONCENTER_KEY } }
-  );
+  // Проверяем транзакции на твоем адресе
+  const res = await fetch(`https://toncenter.com/api/v2/getTransactions?address=${RECEIVER_ADDRESS}`, {
+    headers: { "X-API-Key": TONCENTER_KEY }
+  });
 
   const r = await res.json();
   if (!r.ok) return json({ error: "toncenter error" });
 
-  const txs = r.result.transactions || [];
+  // Проверяем, что есть транзакция с текстом payment_id
+  const tx = (r.result.transactions || []).find(t => t.in_msg && t.in_msg.message && t.in_msg.message.includes(id));
 
-  // Ищем транзакцию с amount и memo = payment_id
-  const found = txs.find(tx => {
-    return tx.in_msg && tx.in_msg.value === amount.toString() &&
-           tx.in_msg.message && tx.in_msg.message.includes(id);
-  });
-
-  if (found) {
+  if (tx) {
     const bal = parseFloat(await BALANCE_KV.get(data.user_id) || 0);
     const newBal = bal + amount;
 
@@ -159,8 +159,8 @@ async function checkPayment(request) {
     data.status = "done";
     await PAYMENTS_KV.put(id, JSON.stringify(data));
 
-    return json({ ok: true, balance: newBal });
+    return json({ ok: true });
   }
 
   return json({ ok: false });
-    }
+}
