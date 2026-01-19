@@ -8,6 +8,7 @@ export default {
     if (path === "/inventory") return inventory(url, env)
     if (path === "/add-nft") return addNft(request, env)
     if (path === "/sell-nft") return sellNft(request, env)
+    if (path === "/add-ton") return addTon(request, env)
 
     return new Response("Not found", { status: 404 })
   }
@@ -27,6 +28,25 @@ async function getBalance(url, env) {
   return json({ balance: Number(bal) })
 }
 
+/* ================= PRIZES ================= */
+const prizes = [
+  { name: "NFT #1", type: "nft", price: 3.27, chance: 10 },
+  { name: "NFT #2", type: "nft", price: 3.27, chance: 5 },
+  { name: "10 TON", type: "ton", amount: 10, chance: 20 },
+  { name: "5 TON", type: "ton", amount: 5, chance: 25 },
+  { name: "1 TON", type: "ton", amount: 1, chance: 40 },
+]
+
+function getRandomPrize() {
+  const total = prizes.reduce((a, b) => a + b.chance, 0)
+  let r = Math.random() * total
+  for (const p of prizes) {
+    r -= p.chance
+    if (r <= 0) return p
+  }
+  return prizes[0]
+}
+
 async function daily(url, env) {
   const user = url.searchParams.get("user")
   if (!user) return json({ error: "no_user" })
@@ -40,21 +60,13 @@ async function daily(url, env) {
 
   await env.DAILY_KV.put(user, String(now))
 
-  const reward = (Math.random() * 0.3 + 0.1).toFixed(2)
-  const bal = Number(await env.BALANCE_KV.get(user) || 0)
-  const newBal = bal + Number(reward)
+  const prize = getRandomPrize()
 
-  await env.BALANCE_KV.put(user, String(newBal))
-
-  const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]")
-  inv.push({ name: "Daily Gift", price: 0.2 })
-  await env.INVENTORY_KV.put(user, JSON.stringify(inv))
-
+  // Если TON — НЕ начисляем сразу
+  // Возвращаем приз клиенту
   return json({
     ok: true,
-    reward,
-    balance: newBal,
-    item: "Daily Gift"
+    prize
   })
 }
 
@@ -87,3 +99,11 @@ async function sellNft(request, env) {
   await env.BALANCE_KV.put(user, String(newBal))
   return json({ balance: newBal, inventory: inv })
 }
+
+async function addTon(request, env) {
+  const { user, amount } = await request.json()
+  const bal = Number(await env.BALANCE_KV.get(user) || 0)
+  const newBal = bal + Number(amount || 0)
+  await env.BALANCE_KV.put(user, String(newBal))
+  return json({ balance: newBal })
+                              }
