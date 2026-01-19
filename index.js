@@ -8,7 +8,7 @@ export default {
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
+          "Access-Control-Allow-Headers": "Content-Type"
         }
       });
     }
@@ -29,7 +29,8 @@ const json = (data) =>
   new Response(JSON.stringify(data), {
     headers: {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*"
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type"
     }
   });
 
@@ -50,7 +51,6 @@ async function addBalance(request, env) {
 
 /* ================== DAILY STATUS ================== */
 async function dailyStatus(url, env) {
-  const user = url.searchParams.get("user");
   return json({ ok: true, remaining: 0, last: 0 });
 }
 
@@ -88,4 +88,4 @@ async function sellNft(request, env) {
   await env.BALANCE_KV.put(user, String(newBal));
 
   return json({ ok: true, balance: newBal, inventory: inv });
-      }
+}
