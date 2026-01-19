@@ -1,4 +1,4 @@
-  const CORS_HEADERS = {
+const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
@@ -18,6 +18,16 @@ export default {
       const userId = url.searchParams.get("user_id");
       const balance = await env.BALANCE_KV.get("balance_" + userId);
       return new Response(JSON.stringify({ balance: parseFloat(balance || "0") }), {
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+
+    // GET /inventory
+    if (request.method === "GET" && path === "/inventory") {
+      const userId = url.searchParams.get("user_id");
+      const inventoryRaw = await env.INVENTORY_KV.get("inventory_" + userId);
+      const inventory = inventoryRaw ? JSON.parse(inventoryRaw) : [];
+      return new Response(JSON.stringify({ inventory }), {
         headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       });
     }
@@ -55,7 +65,7 @@ export default {
 
       const paymentData = JSON.parse(paymentDataRaw);
 
-      // Здесь проверка транзакции через TON API
+      // Проверка транзакции через TON API
       const toncenterKey = env.TONCENTER_KEY;
 
       const txRes = await fetch(
@@ -83,6 +93,24 @@ export default {
       await env.PAYMENTS_KV.put(paymentId, JSON.stringify({ ...paymentData, status: "paid", txId }));
 
       return new Response(JSON.stringify({ balance: newBalance }), {
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+
+    // POST /add-inventory (добавить NFT)
+    if (request.method === "POST" && path === "/add-inventory") {
+      const body = await request.json();
+      const userId = body.user_id;
+      const item = body.item; // { name: "NFT lol pop", ... }
+
+      const inventoryRaw = await env.INVENTORY_KV.get("inventory_" + userId);
+      const inventory = inventoryRaw ? JSON.parse(inventoryRaw) : [];
+
+      inventory.push(item);
+
+      await env.INVENTORY_KV.put("inventory_" + userId, JSON.stringify(inventory));
+
+      return new Response(JSON.stringify({ ok: true, inventory }), {
         headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       });
     }
