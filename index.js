@@ -14,14 +14,28 @@ const YOUR_WALLET = "UQAFXBXzBzau6ZCWzruiVrlTg3HAc8MF6gKIntqTLDifuWOi"
 async function handleRequest(request) {
   const url = new URL(request.url)
 
-  if (url.pathname === "/balance") return cors(getBalance(url))
-  if (url.pathname === "/inventory") return cors(getInventory(url))
-  if (url.pathname === "/daily") return cors(getDaily(url))
-  if (url.pathname === "/add-ton") return cors(addTon(request))
-  if (url.pathname === "/add-nft") return cors(addNft(request))
-  if (url.pathname === "/sell-nft") return cors(sellNft(request))
-  if (url.pathname === "/create-payment") return cors(createPayment(request))
-  if (url.pathname === "/check-payment") return cors(checkPayment(request))
+  // CORS preflight
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type"
+      }
+    })
+  }
+
+  const path = url.pathname
+
+  // routes
+  if (path === "/balance") return cors(getBalance(url))
+  if (path === "/inventory") return cors(getInventory(url))
+  if (path === "/daily") return cors(getDaily(url))
+  if (path === "/add-ton") return cors(addTon(request))
+  if (path === "/add-nft") return cors(addNft(request))
+  if (path === "/sell-nft") return cors(sellNft(request))
+  if (path === "/create-payment") return cors(createPayment(request))
+  if (path === "/check-payment") return cors(checkPayment(request))
 
   return cors(new Response("Not found", { status: 404 }))
 }
@@ -42,20 +56,19 @@ function json(data) {
 }
 
 async function getBalance(url) {
-  const user_id = url.searchParams.get("user_id")
+  const user_id = url.searchParams.get("user_id") || ""
   const bal = await BALANCE_KV.get(user_id) || "0"
   return json({ balance: bal })
 }
 
 async function getInventory(url) {
-  const user_id = url.searchParams.get("user_id")
+  const user_id = url.searchParams.get("user_id") || ""
   const inv = await INVENTORY_KV.get(user_id)
   return json({ inventory: inv ? JSON.parse(inv) : [] })
 }
 
 async function getDaily(url) {
   const user_id = url.searchParams.get("user_id")
-
   if (!user_id) return json({ error: "no user_id" })
 
   const last = await DAILY_KV.get(user_id)
@@ -116,12 +129,14 @@ async function sellNft(request) {
   return json({ inventory: arr, balance: newBal })
 }
 
+// ========== Payment ==========
+
 async function createPayment(request) {
   const body = await request.json()
   const user_id = body.user_id
   const amount = body.amount
 
-  const id = "pay_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5)
+  const id = "pay_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7)
 
   await PAYMENTS_KV.put(id, JSON.stringify({
     user_id,
@@ -146,9 +161,10 @@ async function checkPayment(request) {
     return json({ ok: true, balance: await BALANCE_KV.get(data.user_id) })
   }
 
-  const res = await fetch("https://toncenter.com/api/v2/getTransactions?address=" + YOUR_WALLET + "&limit=50", {
-    headers: { "X-API-Key": TONCENTER_KEY }
-  })
+  const res = await fetch(
+    `https://toncenter.com/api/v2/getTransactions?address=${YOUR_WALLET}&limit=50`,
+    { headers: { "X-API-Key": TONCENTER_KEY } }
+  )
 
   const r = await res.json()
   if (!r.ok) return json({ error: "toncenter error" })
@@ -158,9 +174,8 @@ async function checkPayment(request) {
   for (const tx of txs) {
     if (!tx.in_msg) continue
 
-    const msg = tx.in_msg
-    const text = msg.text || ""
-    const value = parseFloat(msg.value) || 0
+    const text = tx.in_msg.text || ""
+    const value = parseFloat(tx.in_msg.value) || 0
     const tonValue = value / 1e9
 
     if (text === id && tonValue >= amount) {
@@ -177,4 +192,4 @@ async function checkPayment(request) {
   }
 
   return json({ ok: false })
-               }
+  }
