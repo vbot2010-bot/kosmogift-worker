@@ -1,4 +1,3 @@
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
@@ -113,4 +112,4 @@ async function adminSetBalance(request, env) {
   const { user, ton } = await request.json()
   await env.BALANCE_KV.put(user, String(ton))
   return json({ ok: true, user, balance: ton })
-}
+           }
