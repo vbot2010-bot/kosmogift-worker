@@ -8,22 +8,33 @@ const INVENTORY_KV = INVENTORY_KV
 const DAILY_KV = DAILY_KV
 
 const TONCENTER_KEY = TONCENTER_KEY
+
 const YOUR_WALLET = "UQAFXBXzBzau6ZCWzruiVrlTg3HAc8MF6gKIntqTLDifuWOi"
 
 async function handleRequest(request) {
   const url = new URL(request.url)
 
-  if (url.pathname === "/balance") return getBalance(url)
-  if (url.pathname === "/inventory") return getInventory(url)
-  if (url.pathname === "/daily") return getDaily(url)
-  if (url.pathname === "/add-ton") return addTon(request)
-  if (url.pathname === "/add-nft") return addNft(request)
-  if (url.pathname === "/sell-nft") return sellNft(request)
+  if (url.pathname === "/balance") return cors(getBalance(url))
+  if (url.pathname === "/inventory") return cors(getInventory(url))
+  if (url.pathname === "/daily") return cors(getDaily(url))
+  if (url.pathname === "/add-ton") return cors(addTon(request))
+  if (url.pathname === "/add-nft") return cors(addNft(request))
+  if (url.pathname === "/sell-nft") return cors(sellNft(request))
 
-  if (url.pathname === "/create-payment") return createPayment(request)
-  if (url.pathname === "/check-payment") return checkPayment(request)
+  if (url.pathname === "/create-payment") return cors(createPayment(request))
+  if (url.pathname === "/check-payment") return cors(checkPayment(request))
 
-  return new Response("Not found", { status: 404 })
+  return cors(new Response("Not found", { status: 404 }))
+}
+
+function cors(responsePromise) {
+  // responsePromise может быть Response или Promise<Response>
+  return Promise.resolve(responsePromise).then(res => {
+    res.headers.set("Access-Control-Allow-Origin", "*")
+    res.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+    res.headers.set("Access-Control-Allow-Headers", "Content-Type")
+    return res
+  })
 }
 
 function json(data) {
@@ -46,6 +57,8 @@ async function getInventory(url) {
 
 async function getDaily(url) {
   const user_id = url.searchParams.get("user_id")
+  if (!user_id) return json({ error: "no user_id" })
+
   const last = await DAILY_KV.get(user_id)
 
   const now = Date.now()
@@ -148,10 +161,9 @@ async function checkPayment(request) {
 
   for (const tx of txs) {
     if (!tx.in_msg) continue
-    const msg = tx.in_msg
 
-    // TONCENTER: text может быть в msg.text или msg.body
-    const text = msg.text || msg.body || ""
+    const msg = tx.in_msg
+    const text = msg.text || ""
     const value = parseFloat(msg.value) || 0
     const tonValue = value / 1e9
 
@@ -169,4 +181,4 @@ async function checkPayment(request) {
   }
 
   return json({ ok: false })
-    }
+}
