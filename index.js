@@ -12,6 +12,10 @@ export default {
     if (path === "/add-balance") return addBalance(request, env)
     if (path === "/admin/set-balance") return adminSetBalance(request, env)
 
+    // НОВЫЕ ЭНДПОИНТЫ
+    if (path === "/deposit-request") return depositRequest(request, env)
+    if (path === "/check-payment") return checkPayment(request, env)
+
     return new Response("Not found", { status: 404 })
   }
 }
@@ -112,4 +116,62 @@ async function adminSetBalance(request, env) {
   const { user, ton } = await request.json()
   await env.BALANCE_KV.put(user, String(ton))
   return json({ ok: true, user, balance: ton })
-           }
+}
+
+/* ================== DEPOSIT REQUEST ================== */
+async function depositRequest(request, env) {
+  const { user, amount } = await request.json()
+  await env.DEPOSIT_KV.put(user, JSON.stringify({ amount, created: Date.now() }))
+  return json({ ok: true })
+}
+
+/* ================== CHECK PAYMENT ================== */
+async function checkPayment(request, env) {
+  const { user } = await request.json()
+
+  const depRaw = await env.DEPOSIT_KV.get(user)
+  if (!depRaw) return json({ error: "no_deposit" })
+
+  const dep = JSON.parse(depRaw)
+  const amount = Number(dep.amount)
+
+  const address = env.TON_ADDRESS
+  const apiKey = env.TONCENTER_API_KEY
+
+  const url =
+    `https://toncenter.com/api/v2/getTransactions?address=${address}&limit=20&api_key=${apiKey}`
+
+  const res = await fetch(url)
+  const data = await res.json()
+
+  if (!data.ok) return json({ error: "api_error" })
+
+  const txs = data.result
+  let found = null
+
+  for (const tx of txs) {
+    if (tx.in_msg && tx.in_msg.value) {
+      const value = Number(tx.in_msg.value) / 1e9
+      if (value === amount) {
+        found = tx.in_msg
+        break
+      }
+    }
+  }
+
+  if (!found) return json({ ok: false, message: "not_found" })
+
+  const txHash = found.hash
+  const already = await env.CREDITED_KV.get(txHash)
+  if (already) return json({ ok: false, message: "already_credited" })
+
+  // начисляем баланс
+  const bal = Number(await env.BALANCE_KV.get(user) || 0)
+  const newBal = bal + amount
+  await env.BALANCE_KV.put(user, String(newBal))
+
+  // помечаем tx как использованную
+  await env.CREDITED_KV.put(txHash, "1")
+
+  return json({ ok: true, balance: newBal })
+      }
