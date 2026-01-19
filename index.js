@@ -6,6 +6,7 @@ export default {
     if (path === "/balance") return getBalance(url, env)
     if (path === "/daily") return daily(url, env)
     if (path === "/daily-status") return dailyStatus(url, env)
+    if (path === "/add-balance") return addBalance(request, env)
     if (path === "/inventory") return inventory(url, env)
     if (path === "/add-nft") return addNft(request, env)
     if (path === "/sell-nft") return sellNft(request, env)
@@ -32,70 +33,35 @@ async function dailyStatus(url, env) {
   const user = url.searchParams.get("user")
   const last = await env.DAILY_KV.get(user)
 
-  if (!last) {
-    return json({ ok: true, remaining: 0, last: 0 })
-  }
+  if (!last) return json({ remaining: 0 })
 
-  const now = Date.now()
-  const diff = now - Number(last)
+  const diff = Date.now() - Number(last)
   const remaining = diff >= 86400000 ? 0 : 86400000 - diff
 
-  return json({ ok: true, remaining, last: Number(last) })
+  return json({ remaining })
 }
+
 async function daily(url, env) {
   const user = url.searchParams.get("user")
   if (!user) return json({ error: "no_user" })
 
   const last = await env.DAILY_KV.get(user)
-  const now = Date.now()
-
-  if (last && now - Number(last) < 86400000) {
+  if (last && Date.now() - Number(last) < 86400000) {
     return json({ error: "already" })
   }
 
-  await env.DAILY_KV.put(user, String(now))
-
+  await env.DAILY_KV.put(user, String(Date.now()))
   return json({ ok: true })
 }
 
-  await env.DAILY_KV.put(user, String(now))
+async function addBalance(request, env) {
+  const { user, amount } = await request.json()
 
-  // награда (с шансами)
-  const prizes = [
-    { type: "ton", value: 0.01, chance: 90 },
-    { type: "ton", value: 0.02, chance: 5 },
-    { type: "ton", value: 0.03, chance: 2.5 },
-    { type: "ton", value: 0.04, chance: 1 },
-    { type: "ton", value: 0.05, chance: 0.75 },
-    { type: "ton", value: 0.06, chance: 0.5 },
-    { type: "ton", value: 0.07, chance: 0.24 },
-    { type: "nft", value: "lol pop", chance: 0.01 }
-  ];
+  const bal = Number(await env.BALANCE_KV.get(user) || 0)
+  const newBal = bal + Number(amount)
 
-  const rand = Math.random() * 100;
-  let sum = 0;
-  let prize = prizes[0];
-
-  for (const p of prizes) {
-    sum += p.chance;
-    if (rand <= sum) {
-      prize = p;
-      break;
-    }
-  }
-
-  const bal = Number(await env.BALANCE_KV.get(user) || 0);
-
-  if (prize.type === "ton") {
-    const newBal = bal + prize.value;
-    await env.BALANCE_KV.put(user, String(newBal));
-    return json({ ok: true, type: "ton", value: prize.value, balance: newBal });
-  } else {
-    const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]");
-    inv.push({ name: prize.value, price: 3.27 });
-    await env.INVENTORY_KV.put(user, JSON.stringify(inv));
-    return json({ ok: true, type: "nft", value: prize.value, balance: bal });
-  }
+  await env.BALANCE_KV.put(user, String(newBal))
+  return json({ balance: newBal })
 }
 
 async function inventory(url, env) {
@@ -115,6 +81,7 @@ async function addNft(request, env) {
 async function sellNft(request, env) {
   const { user, index } = await request.json()
   const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]")
+
   const nft = inv[index]
   if (!nft) return json({ error: "not_found" })
 
@@ -122,8 +89,8 @@ async function sellNft(request, env) {
   await env.INVENTORY_KV.put(user, JSON.stringify(inv))
 
   const bal = Number(await env.BALANCE_KV.get(user) || 0)
-  const newBal = bal + Number(nft.price || 0)
+  const newBal = bal + Number(nft.price)
 
   await env.BALANCE_KV.put(user, String(newBal))
-  return json({ balance: newBal, inventory: inv })
-}
+  return json({ balance: newBal })
+    }
