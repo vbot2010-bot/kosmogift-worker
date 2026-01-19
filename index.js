@@ -42,7 +42,6 @@ async function dailyStatus(url, env) {
 
   return json({ ok: true, remaining, last: Number(last) })
 }
-
 async function daily(url, env) {
   const user = url.searchParams.get("user")
   if (!user) return json({ error: "no_user" })
@@ -51,8 +50,13 @@ async function daily(url, env) {
   const now = Date.now()
 
   if (last && now - Number(last) < 86400000) {
-    return json({ error: "already" }
+    return json({ error: "already" })
   }
+
+  await env.DAILY_KV.put(user, String(now))
+
+  return json({ ok: true })
+}
 
   await env.DAILY_KV.put(user, String(now))
 
