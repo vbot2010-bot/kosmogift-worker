@@ -26,8 +26,26 @@ export default {
     if (request.method === "GET" && path === "/inventory") {
       const userId = url.searchParams.get("user_id");
       const inventoryRaw = await env.INVENTORY_KV.get("inventory_" + userId);
-      const inventory = inventoryRaw ? JSON.parse(inventoryRaw) : [];
+      const inventory = JSON.parse(inventoryRaw || "[]");
       return new Response(JSON.stringify({ inventory }), {
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+
+    // POST /inventory/add
+    if (request.method === "POST" && path === "/inventory/add") {
+      const body = await request.json();
+      const userId = body.user_id;
+      const nft = body.nft; // { id, name, price }
+
+      const inventoryRaw = await env.INVENTORY_KV.get("inventory_" + userId);
+      const inventory = JSON.parse(inventoryRaw || "[]");
+
+      inventory.push(nft);
+
+      await env.INVENTORY_KV.put("inventory_" + userId, JSON.stringify(inventory));
+
+      return new Response(JSON.stringify({ ok: true }), {
         headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       });
     }
@@ -65,7 +83,6 @@ export default {
 
       const paymentData = JSON.parse(paymentDataRaw);
 
-      // Проверка транзакции через TON API
       const toncenterKey = env.TONCENTER_KEY;
 
       const txRes = await fetch(
@@ -93,24 +110,6 @@ export default {
       await env.PAYMENTS_KV.put(paymentId, JSON.stringify({ ...paymentData, status: "paid", txId }));
 
       return new Response(JSON.stringify({ balance: newBalance }), {
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
-    }
-
-    // POST /add-inventory (добавить NFT)
-    if (request.method === "POST" && path === "/add-inventory") {
-      const body = await request.json();
-      const userId = body.user_id;
-      const item = body.item; // { name: "NFT lol pop", ... }
-
-      const inventoryRaw = await env.INVENTORY_KV.get("inventory_" + userId);
-      const inventory = inventoryRaw ? JSON.parse(inventoryRaw) : [];
-
-      inventory.push(item);
-
-      await env.INVENTORY_KV.put("inventory_" + userId, JSON.stringify(inventory));
-
-      return new Response(JSON.stringify({ ok: true, inventory }), {
         headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       });
     }
