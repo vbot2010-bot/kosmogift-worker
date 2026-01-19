@@ -21,6 +21,10 @@ export default {
     if (path === "/sell-nft") return sellNft(request, env);
     if (path === "/add-balance") return addBalance(request, env);
 
+    // ✅ НОВЫЕ ENDPOINT’Ы
+    if (path === "/remove-balance") return removeBalance(request, env);
+    if (path === "/unlucky") return unluckyCase(request, env);
+
     return new Response("Not found", { status: 404 });
   }
 }
@@ -49,6 +53,20 @@ async function addBalance(request, env) {
   return json({ ok: true, balance: newBal });
 }
 
+/* ================== REMOVE BALANCE ================== */
+async function removeBalance(request, env) {
+  const { user, amount } = await request.json();
+  const bal = Number(await env.BALANCE_KV.get(user) || 0);
+  const newBal = bal - Number(amount);
+
+  if (newBal < 0) {
+    return json({ ok: false, error: "not_enough_balance" });
+  }
+
+  await env.BALANCE_KV.put(user, String(newBal));
+  return json({ ok: true, balance: newBal });
+}
+
 /* ================== DAILY STATUS ================== */
 async function dailyStatus(url, env) {
   return json({ ok: true, remaining: 0, last: 0 });
@@ -56,6 +74,13 @@ async function dailyStatus(url, env) {
 
 /* ================== DAILY ================== */
 async function daily(url, env) {
+  return json({ ok: true });
+}
+
+/* ================== UNLUCKY CASE (ОТДЕЛЬНЫЙ ENDPOINT) ================== */
+async function unluckyCase(request, env) {
+  // Здесь можно добавить логику проверки баланса, лимитов и т.д.
+  // Пока просто возвращаем ok
   return json({ ok: true });
 }
 
@@ -88,4 +113,4 @@ async function sellNft(request, env) {
   await env.BALANCE_KV.put(user, String(newBal));
 
   return json({ ok: true, balance: newBal, inventory: inv });
-}
+  }
