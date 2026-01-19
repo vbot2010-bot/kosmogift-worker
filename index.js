@@ -22,27 +22,6 @@ const json = data =>
     }
   })
 
-const prizes = [
-  { type: "ton", value: 0.01, chance: 90 },
-  { type: "ton", value: 0.02, chance: 5 },
-  { type: "ton", value: 0.03, chance: 2.5 },
-  { type: "ton", value: 0.04, chance: 1 },
-  { type: "ton", value: 0.05, chance: 0.75 },
-  { type: "ton", value: 0.06, chance: 0.5 },
-  { type: "ton", value: 0.07, chance: 0.24 },
-  { type: "nft", value: "lol pop", chance: 0.01 }
-]
-
-function getPrize() {
-  const rand = Math.random() * 100
-  let sum = 0
-  for (const p of prizes) {
-    sum += p.chance
-    if (rand <= sum) return p
-  }
-  return prizes[0]
-}
-
 async function getBalance(url, env) {
   const user = url.searchParams.get("user")
   const bal = await env.BALANCE_KV.get(user) || "0"
@@ -77,25 +56,42 @@ async function daily(url, env) {
 
   await env.DAILY_KV.put(user, String(now))
 
-  const prize = getPrize()
+  // награда (с шансами)
+  const prizes = [
+    { type: "ton", value: 0.01, chance: 90 },
+    { type: "ton", value: 0.02, chance: 5 },
+    { type: "ton", value: 0.03, chance: 2.5 },
+    { type: "ton", value: 0.04, chance: 1 },
+    { type: "ton", value: 0.05, chance: 0.75 },
+    { type: "ton", value: 0.06, chance: 0.5 },
+    { type: "ton", value: 0.07, chance: 0.24 },
+    { type: "nft", value: "lol pop", chance: 0.01 }
+  ];
 
-  if (prize.type === "ton") {
-    const bal = Number(await env.BALANCE_KV.get(user) || 0)
-    const newBal = bal + Number(prize.value)
-    await env.BALANCE_KV.put(user, String(newBal))
+  const rand = Math.random() * 100;
+  let sum = 0;
+  let prize = prizes[0];
 
-    return json({
-      ok: true,
-      prize,
-      balance: newBal
-    })
+  for (const p of prizes) {
+    sum += p.chance;
+    if (rand <= sum) {
+      prize = p;
+      break;
+    }
   }
 
-  return json({
-    ok: true,
-    prize,
-    balance: Number(await env.BALANCE_KV.get(user) || 0)
-  })
+  const bal = Number(await env.BALANCE_KV.get(user) || 0);
+
+  if (prize.type === "ton") {
+    const newBal = bal + prize.value;
+    await env.BALANCE_KV.put(user, String(newBal));
+    return json({ ok: true, type: "ton", value: prize.value, balance: newBal });
+  } else {
+    const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]");
+    inv.push({ name: prize.value, price: 3.27 });
+    await env.INVENTORY_KV.put(user, JSON.stringify(inv));
+    return json({ ok: true, type: "nft", value: prize.value, balance: bal });
+  }
 }
 
 async function inventory(url, env) {
