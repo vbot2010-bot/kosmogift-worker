@@ -13,3 +13,7 @@ id = "3b02d8520f7d4fa8b3316f5177f21bb6"
 [[kv_namespaces]]
 binding = "INVENTORY_KV"
 id = "72ff3347158c45429302be2a37af246b"
+
+[[kv_namespaces]]
+binding = "DAILY_KV"
+id = "8208a7da59e248cc842bfaffbb6e1fc0"
