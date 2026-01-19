@@ -99,4 +99,4 @@ async function sellNft(request, env) {
   await env.BALANCE_KV.put(user, String(newBal));
 
   return json({ ok: true, balance: newBal, inventory: inv });
-    }
+                     }
