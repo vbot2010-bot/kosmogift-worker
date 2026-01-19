@@ -10,9 +10,6 @@ export default {
     if (path === "/add-nft") return addNft(request, env)
     if (path === "/sell-nft") return sellNft(request, env)
 
-    // admin
-    if (path === "/admin/set-balance") return setBalance(request, env)
-
     return new Response("Not found", { status: 404 })
   }
 }
@@ -59,7 +56,6 @@ async function daily(url, env) {
 
   await env.DAILY_KV.put(user, String(now))
 
-  // награда (пример)
   const reward = (Math.random() * 0.3 + 0.1).toFixed(2)
   const bal = Number(await env.BALANCE_KV.get(user) || 0)
   const newBal = bal + Number(reward)
@@ -106,17 +102,4 @@ async function sellNft(request, env) {
 
   await env.BALANCE_KV.put(user, String(newBal))
   return json({ balance: newBal, inventory: inv })
-}
-
-/* ================= ADMIN ================= */
-async function setBalance(request, env) {
-  const secret = request.headers.get("ADMIN_SECRET")
-  if (secret !== env.ADMIN_SECRET) {
-    return json({ error: "wrong_secret" })
-  }
-
-  const { user, ton } = await request.json()
-  await env.BALANCE_KV.put(user, String(ton))
-
-  return json({ ok: true, user, balance: ton })
-    }
+                         }
