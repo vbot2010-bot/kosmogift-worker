@@ -14,70 +14,6 @@ export default {
     }
 
     // GET /balance
-    // POST /create-payment
-if (request.method === "POST" && path === "/create-payment") {
-  const body = await request.json();
-  const userId = body.user_id;
-  const amount = parseFloat(body.amount);
-
-  if (!amount || amount < 0.1) {
-    return new Response(JSON.stringify({ error: "Минимум 0.1 TON" }), { status: 400, headers: CORS_HEADERS });
-  }
-
-  const paymentId = "payment_" + Date.now();
-  const paymentData = { user_id: userId, amount, status: "pending" };
-
-  await env.PAYMENTS_KV.put(paymentId, JSON.stringify(paymentData));
-
-  return new Response(JSON.stringify({ paymentId }), {
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-  });
-}
-
-// POST /check-payment
-if (request.method === "POST" && path === "/check-payment") {
-  const body = await request.json();
-  const paymentId = body.payment_id;
-  const txId = body.tx_id;
-
-  const paymentDataRaw = await env.PAYMENTS_KV.get(paymentId);
-  if (!paymentDataRaw) {
-    return new Response(JSON.stringify({ error: "Платёж не найден" }), { status: 404, headers: CORS_HEADERS });
-  }
-
-  const paymentData = JSON.parse(paymentDataRaw);
-
-  // Проверка транзакции через TON API
-  const toncenterKey = env.TONCENTER_KEY;
-
-  const txRes = await fetch(
-    `https://toncenter.com/api/v2/getTransactions?address=UQAFXBXzBzau6ZCWzruiVrlTg3HAc8MF6gKIntqTLDifuWOi&hash=${txId}`,
-    { headers: { "X-API-Key": toncenterKey } }
-  );
-
-  const txJson = await txRes.json();
-
-  if (!txJson.ok || !txJson.result || txJson.result.length === 0) {
-    return new Response(JSON.stringify({ error: "Транзакция не найдена или ещё не подтверждена" }), { status: 400, headers: CORS_HEADERS });
-  }
-
-  const tx = txJson.result[0];
-  const amountTon = parseFloat(tx.in_msg.value / 1e9);
-
-  if (amountTon < paymentData.amount) {
-    return new Response(JSON.stringify({ error: "Сумма меньше" }), { status: 400, headers: CORS_HEADERS });
-  }
-
-  const currentBalance = parseFloat(await env.BALANCE_KV.get("balance_" + paymentData.user_id) || "0");
-  const newBalance = currentBalance + paymentData.amount;
-
-  await env.BALANCE_KV.put("balance_" + paymentData.user_id, newBalance.toString());
-  await env.PAYMENTS_KV.put(paymentId, JSON.stringify({ ...paymentData, status: "paid", txId }));
-
-  return new Response(JSON.stringify({ balance: newBalance }), {
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-  });
-    }
     if (request.method === "GET" && path === "/balance") {
       const userId = url.searchParams.get("user_id");
       const balance = await env.BALANCE_KV.get("balance_" + userId);
@@ -119,10 +55,8 @@ if (request.method === "POST" && path === "/check-payment") {
         });
       }
 
-      // Save last open time
       await env.DAILY_KV.put("daily_" + userId, now.toString());
 
-      // Prize logic
       const rnd = Math.random() * 100;
       let prize;
 
@@ -140,7 +74,23 @@ if (request.method === "POST" && path === "/check-payment") {
       });
     }
 
-    // POST /add-nft (в inventory)
+    // POST /add-ton
+    if (request.method === "POST" && path === "/add-ton") {
+      const body = await request.json();
+      const userId = body.user_id;
+      const amount = parseFloat(body.amount);
+
+      const currentBalance = parseFloat(await env.BALANCE_KV.get("balance_" + userId) || "0");
+      const newBalance = currentBalance + amount;
+
+      await env.BALANCE_KV.put("balance_" + userId, newBalance.toString());
+
+      return new Response(JSON.stringify({ balance: newBalance }), {
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+
+    // POST /add-nft
     if (request.method === "POST" && path === "/add-nft") {
       const body = await request.json();
       const userId = body.user_id;
@@ -157,23 +107,7 @@ if (request.method === "POST" && path === "/check-payment") {
       });
     }
 
-    // POST /sell-ton (продать TON из окна приза)
-    if (request.method === "POST" && path === "/sell-ton") {
-      const body = await request.json();
-      const userId = body.user_id;
-      const amount = parseFloat(body.amount);
-
-      const currentBalance = parseFloat(await env.BALANCE_KV.get("balance_" + userId) || "0");
-      const newBalance = currentBalance + amount;
-
-      await env.BALANCE_KV.put("balance_" + userId, newBalance.toString());
-
-      return new Response(JSON.stringify({ balance: newBalance }), {
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
-    }
-
-    // POST /sell-nft (из inventory)
+    // POST /sell-nft
     if (request.method === "POST" && path === "/sell-nft") {
       const body = await request.json();
       const userId = body.user_id;
@@ -196,6 +130,72 @@ if (request.method === "POST" && path === "/check-payment") {
       await env.BALANCE_KV.put("balance_" + userId, newBalance.toString());
 
       return new Response(JSON.stringify({ balance: newBalance, inventory }), {
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+
+    // ------------------ ПЛАТЕЖИ ------------------
+
+    // POST /create-payment
+    if (request.method === "POST" && path === "/create-payment") {
+      const body = await request.json();
+      const userId = body.user_id;
+      const amount = parseFloat(body.amount);
+
+      if (!amount || amount < 0.1) {
+        return new Response(JSON.stringify({ error: "Минимум 0.1 TON" }), { status: 400, headers: CORS_HEADERS });
+      }
+
+      const paymentId = "payment_" + Date.now();
+      const paymentData = { user_id: userId, amount, status: "pending" };
+
+      await env.PAYMENTS_KV.put(paymentId, JSON.stringify(paymentData));
+
+      return new Response(JSON.stringify({ paymentId }), {
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+
+    // POST /check-payment
+    if (request.method === "POST" && path === "/check-payment") {
+      const body = await request.json();
+      const paymentId = body.payment_id;
+      const txId = body.tx_id;
+
+      const paymentDataRaw = await env.PAYMENTS_KV.get(paymentId);
+      if (!paymentDataRaw) {
+        return new Response(JSON.stringify({ error: "Платёж не найден" }), { status: 404, headers: CORS_HEADERS });
+      }
+
+      const paymentData = JSON.parse(paymentDataRaw);
+
+      const toncenterKey = env.TONCENTER_KEY;
+
+      const txRes = await fetch(
+        `https://toncenter.com/api/v2/getTransactions?address=UQAFXBXzBzau6ZCWzruiVrlTg3HAc8MF6gKIntqTLDifuWOi&hash=${txId}`,
+        { headers: { "X-API-Key": toncenterKey } }
+      );
+
+      const txJson = await txRes.json();
+
+      if (!txJson.ok || !txJson.result || txJson.result.length === 0) {
+        return new Response(JSON.stringify({ error: "Транзакция не найдена или ещё не подтверждена" }), { status: 400, headers: CORS_HEADERS });
+      }
+
+      const tx = txJson.result[0];
+      const amountTon = parseFloat(tx.in_msg.value / 1e9);
+
+      if (amountTon < paymentData.amount) {
+        return new Response(JSON.stringify({ error: "Сумма меньше" }), { status: 400, headers: CORS_HEADERS });
+      }
+
+      const currentBalance = parseFloat(await env.BALANCE_KV.get("balance_" + paymentData.user_id) || "0");
+      const newBalance = currentBalance + paymentData.amount;
+
+      await env.BALANCE_KV.put("balance_" + paymentData.user_id, newBalance.toString());
+      await env.PAYMENTS_KV.put(paymentId, JSON.stringify({ ...paymentData, status: "paid", txId }));
+
+      return new Response(JSON.stringify({ balance: newBalance }), {
         headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       });
     }
