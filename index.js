@@ -2,15 +2,16 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url)
     const path = url.pathname
-    if (path === "/admin/set-balance") return adminSetBalance(request, env)
 
     if (path === "/balance") return getBalance(url, env)
     if (path === "/daily") return daily(url, env)
     if (path === "/daily-status") return dailyStatus(url, env)
-    if (path === "/add-balance") return addBalance(request, env)
     if (path === "/inventory") return inventory(url, env)
     if (path === "/add-nft") return addNft(request, env)
     if (path === "/sell-nft") return sellNft(request, env)
+
+    // admin
+    if (path === "/admin/set-balance") return setBalance(request, env)
 
     return new Response("Not found", { status: 404 })
   }
@@ -34,12 +35,15 @@ async function dailyStatus(url, env) {
   const user = url.searchParams.get("user")
   const last = await env.DAILY_KV.get(user)
 
-  if (!last) return json({ remaining: 0 })
+  if (!last) {
+    return json({ ok: true, remaining: 0, last: 0 })
+  }
 
-  const diff = Date.now() - Number(last)
+  const now = Date.now()
+  const diff = now - Number(last)
   const remaining = diff >= 86400000 ? 0 : 86400000 - diff
 
-  return json({ remaining })
+  return json({ ok: true, remaining, last: Number(last) })
 }
 
 async function daily(url, env) {
@@ -47,22 +51,31 @@ async function daily(url, env) {
   if (!user) return json({ error: "no_user" })
 
   const last = await env.DAILY_KV.get(user)
-  if (last && Date.now() - Number(last) < 86400000) {
+  const now = Date.now()
+
+  if (last && now - Number(last) < 86400000) {
     return json({ error: "already" })
   }
 
-  await env.DAILY_KV.put(user, String(Date.now()))
-  return json({ ok: true })
-}
+  await env.DAILY_KV.put(user, String(now))
 
-async function addBalance(request, env) {
-  const { user, amount } = await request.json()
-
+  // награда (пример)
+  const reward = (Math.random() * 0.3 + 0.1).toFixed(2)
   const bal = Number(await env.BALANCE_KV.get(user) || 0)
-  const newBal = bal + Number(amount)
+  const newBal = bal + Number(reward)
 
   await env.BALANCE_KV.put(user, String(newBal))
-  return json({ balance: newBal })
+
+  const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]")
+  inv.push({ name: "Daily Gift", price: 0.2 })
+  await env.INVENTORY_KV.put(user, JSON.stringify(inv))
+
+  return json({
+    ok: true,
+    reward,
+    balance: newBal,
+    item: "Daily Gift"
+  })
 }
 
 async function inventory(url, env) {
@@ -82,7 +95,6 @@ async function addNft(request, env) {
 async function sellNft(request, env) {
   const { user, index } = await request.json()
   const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]")
-
   const nft = inv[index]
   if (!nft) return json({ error: "not_found" })
 
@@ -90,34 +102,21 @@ async function sellNft(request, env) {
   await env.INVENTORY_KV.put(user, JSON.stringify(inv))
 
   const bal = Number(await env.BALANCE_KV.get(user) || 0)
-  const newBal = bal + Number(nft.price)
+  const newBal = bal + Number(nft.price || 0)
 
   await env.BALANCE_KV.put(user, String(newBal))
-  return json({ balance: newBal })
-    }
-async function adminSetBalance(request, env) {
-  if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 })
-  }
+  return json({ balance: newBal, inventory: inv })
+}
 
-  const body = await request.json()
-  const { user, balance, secret } = body
-
-  if (!user || balance === undefined || !secret) {
-    return json({ error: "bad_request" })
-  }
-
-  // 🔐 защита
+/* ================= ADMIN ================= */
+async function setBalance(request, env) {
+  const secret = request.headers.get("ADMIN_SECRET")
   if (secret !== env.ADMIN_SECRET) {
-    return new Response("Forbidden", { status: 403 })
+    return json({ error: "wrong_secret" })
   }
 
-  // ✏️ ставим баланс РОВНО
-  await env.BALANCE_KV.put(user, String(Number(balance)))
+  const { user, ton } = await request.json()
+  await env.BALANCE_KV.put(user, String(ton))
 
-  return json({
-    ok: true,
-    user,
-    balance: Number(balance)
-  })
-             }
+  return json({ ok: true, user, balance: ton })
+    }
