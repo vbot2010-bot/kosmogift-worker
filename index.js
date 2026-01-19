@@ -20,7 +20,6 @@ async function handleRequest(request) {
   if (url.pathname === "/add-ton") return cors(addTon(request))
   if (url.pathname === "/add-nft") return cors(addNft(request))
   if (url.pathname === "/sell-nft") return cors(sellNft(request))
-
   if (url.pathname === "/create-payment") return cors(createPayment(request))
   if (url.pathname === "/check-payment") return cors(checkPayment(request))
 
@@ -28,7 +27,6 @@ async function handleRequest(request) {
 }
 
 function cors(responsePromise) {
-  // responsePromise может быть Response или Promise<Response>
   return Promise.resolve(responsePromise).then(res => {
     res.headers.set("Access-Control-Allow-Origin", "*")
     res.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
@@ -57,11 +55,12 @@ async function getInventory(url) {
 
 async function getDaily(url) {
   const user_id = url.searchParams.get("user_id")
+
   if (!user_id) return json({ error: "no user_id" })
 
   const last = await DAILY_KV.get(user_id)
-
   const now = Date.now()
+
   if (last && now - parseInt(last) < 86400000) {
     return json({ error: "already" })
   }
@@ -108,7 +107,6 @@ async function sellNft(request) {
   if (idx === -1) return json({ error: "not found" })
 
   arr.splice(idx, 1)
-
   await INVENTORY_KV.put(user_id, JSON.stringify(arr))
 
   const bal = parseFloat(await BALANCE_KV.get(user_id) || 0)
@@ -117,8 +115,6 @@ async function sellNft(request) {
 
   return json({ inventory: arr, balance: newBal })
 }
-
-// ---------------- TON PAYMENT ----------------
 
 async function createPayment(request) {
   const body = await request.json()
@@ -181,4 +177,4 @@ async function checkPayment(request) {
   }
 
   return json({ ok: false })
-}
+               }
