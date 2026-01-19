@@ -17,3 +17,7 @@ id = "72ff3347158c45429302be2a37af246b"
 [[kv_namespaces]]
 binding = "DAILY_KV"
 id = "8208a7da59e248cc842bfaffbb6e1fc0"
+
+[vars]
+TONCENTER_KEY = "AFO7NQMK7S4LRLQAAAADETUV76OSG64OHYPHVKKK27AVSNYMP3KQXTRPX5AALTDGUCVRQ4Q"
+API_URL = "https://kosmogift-worker.v-bot-2010.workers.dev"
