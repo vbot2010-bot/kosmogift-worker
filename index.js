@@ -2,6 +2,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url)
     const path = url.pathname
+    if (path === "/admin/set-balance") return adminSetBalance(request, env)
 
     if (path === "/balance") return getBalance(url, env)
     if (path === "/daily") return daily(url, env)
@@ -94,3 +95,29 @@ async function sellNft(request, env) {
   await env.BALANCE_KV.put(user, String(newBal))
   return json({ balance: newBal })
     }
+async function adminSetBalance(request, env) {
+  if (request.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 })
+  }
+
+  const body = await request.json()
+  const { user, balance, secret } = body
+
+  if (!user || balance === undefined || !secret) {
+    return json({ error: "bad_request" })
+  }
+
+  // 🔐 защита
+  if (secret !== env.ADMIN_SECRET) {
+    return new Response("Forbidden", { status: 403 })
+  }
+
+  // ✏️ ставим баланс РОВНО
+  await env.BALANCE_KV.put(user, String(Number(balance)))
+
+  return json({
+    ok: true,
+    user,
+    balance: Number(balance)
+  })
+             }
