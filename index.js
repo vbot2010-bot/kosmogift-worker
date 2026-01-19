@@ -23,7 +23,6 @@ const json = (data) =>
     }
   });
 
-/* ================== BALANCE ================== */
 async function getBalance(url, env) {
   const user = url.searchParams.get("user");
   const bal = await env.BALANCE_KV.get(user) || "0";
@@ -38,7 +37,6 @@ async function addBalance(request, env) {
   return json({ ok: true, balance: newBal });
 }
 
-/* ================== DAILY STATUS ================== */
 async function dailyStatus(url, env) {
   const user = url.searchParams.get("user");
   const last = await env.DAILY_KV.get(user);
@@ -54,7 +52,6 @@ async function dailyStatus(url, env) {
   return json({ ok: true, remaining, last: Number(last) });
 }
 
-/* ================== DAILY ================== */
 async function daily(url, env) {
   const user = url.searchParams.get("user");
   if (!user) return json({ error: "no_user" });
@@ -70,7 +67,6 @@ async function daily(url, env) {
   return json({ ok: true });
 }
 
-/* ================== INVENTORY ================== */
 async function inventory(url, env) {
   const user = url.searchParams.get("user");
   const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]");
@@ -99,4 +95,4 @@ async function sellNft(request, env) {
   await env.BALANCE_KV.put(user, String(newBal));
 
   return json({ ok: true, balance: newBal, inventory: inv });
-                     }
+}
