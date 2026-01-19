@@ -1,69 +1,89 @@
 export default {
   async fetch(request, env) {
-    try {
-      return await handleRequest(request, env)
-    } catch (e) {
-      return new Response(
-        JSON.stringify({ error: e.message }),
-        { status: 500, headers: corsHeaders() }
-      )
+    const url = new URL(request.url)
+    const path = url.pathname
+
+    if (path === "/balance") return getBalance(url, env)
+    if (path === "/daily") return daily(url, env)
+    if (path === "/inventory") return inventory(url, env)
+    if (path === "/add-nft") return addNft(request, env)
+    if (path === "/sell-nft") return sellNft(request, env)
+
+    return new Response("Not found", { status: 404 })
+  }
+}
+
+const json = data =>
+  new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*"
     }
-  }
-}
+  })
 
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  }
-}
-
-async function handleRequest(request, env) {
-  if (request.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders() })
-  }
-
-  const url = new URL(request.url)
-  const path = url.pathname
-
-  if (path === "/daily") return daily(url, env)
-  if (path === "/balance") return balance(url, env)
-
-  return new Response("Not found", { status: 404, headers: corsHeaders() })
+async function getBalance(url, env) {
+  const user = url.searchParams.get("user")
+  const bal = await env.BALANCE_KV.get(user) || "0"
+  return json({ balance: Number(bal) })
 }
 
 async function daily(url, env) {
-  const user_id = url.searchParams.get("user_id")
-  if (!user_id) {
-    return json({ error: "no user_id" })
-  }
+  const user = url.searchParams.get("user")
+  if (!user) return json({ error: "no_user" })
 
-  const last = await env.DAILY_KV.get(user_id)
+  const last = await env.DAILY_KV.get(user)
   const now = Date.now()
 
   if (last && now - Number(last) < 86400000) {
     return json({ error: "already" })
   }
 
-  await env.DAILY_KV.put(user_id, String(now))
-  return json({ ok: true })
+  await env.DAILY_KV.put(user, String(now))
+
+  const reward = (Math.random() * 0.3 + 0.1).toFixed(2)
+  const bal = Number(await env.BALANCE_KV.get(user) || 0)
+  const newBal = bal + Number(reward)
+
+  await env.BALANCE_KV.put(user, String(newBal))
+
+  const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]")
+  inv.push({ name: "Daily Gift", price: 0.2 })
+  await env.INVENTORY_KV.put(user, JSON.stringify(inv))
+
+  return json({
+    ok: true,
+    reward,
+    balance: newBal,
+    item: "Daily Gift"
+  })
 }
 
-async function balance(url, env) {
-  const user_id = url.searchParams.get("user_id")
-  const bal = await env.BALANCE_KV.get(user_id) || "0"
-  return json({ balance: bal })
+async function inventory(url, env) {
+  const user = url.searchParams.get("user")
+  const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]")
+  return json(inv)
 }
 
-function json(data) {
-  return new Response(
-    JSON.stringify(data),
-    {
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders()
-      }
-    }
-  )
+async function addNft(request, env) {
+  const { user, nft } = await request.json()
+  const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]")
+  inv.push(nft)
+  await env.INVENTORY_KV.put(user, JSON.stringify(inv))
+  return json(inv)
+}
+
+async function sellNft(request, env) {
+  const { user, index } = await request.json()
+  const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]")
+  const nft = inv[index]
+  if (!nft) return json({ error: "not_found" })
+
+  inv.splice(index, 1)
+  await env.INVENTORY_KV.put(user, JSON.stringify(inv))
+
+  const bal = Number(await env.BALANCE_KV.get(user) || 0)
+  const newBal = bal + Number(nft.price || 0)
+
+  await env.BALANCE_KV.put(user, String(newBal))
+  return json({ balance: newBal, inventory: inv })
 }
