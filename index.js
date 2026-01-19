@@ -2,11 +2,7 @@ addEventListener("fetch", event => {
   event.respondWith(handleRequest(event.request))
 })
 
-const BALANCE_KV = BALANCE_KV;
-const PAYMENTS_KV = PAYMENTS_KV;
-const INVENTORY_KV = INVENTORY_KV;
-const DAILY_KV = DAILY_KV;
-
+const TON_WALLET_ADDRESS = "UQAFXBXzBzau6ZCWzruiVrlTg3HAc8MF6gKIntqTLDifuWOi"; // <- вставь сюда адрес
 const TONCENTER_KEY = TONCENTER_KEY;
 
 async function handleRequest(request) {
@@ -110,17 +106,21 @@ async function sellNft(request) {
 async function createPayment(request) {
   const body = await request.json();
   const user_id = body.user_id;
-  const amount = body.amount;
+  const user_wallet = body.user_wallet; // адрес кошелька пользователя
+  const amount = parseFloat(body.amount);
+
+  if (!user_wallet) return json({ error: "no wallet" });
 
   const id = "pay_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
 
   await PAYMENTS_KV.put(id, JSON.stringify({
     user_id,
+    user_wallet,
     amount,
     status: "pending"
   }));
 
-  return json({ payment_id: id });
+  return json({ payment_id: id, pay_to: TON_WALLET_ADDRESS });
 }
 
 async function checkPayment(request) {
@@ -134,19 +134,31 @@ async function checkPayment(request) {
 
   // если статус уже "done"
   if (data.status === "done") {
-    return json({ ok: true, balance: await BALANCE_KV.get(data.user_id) });
+    const bal = await BALANCE_KV.get(data.user_id) || "0";
+    return json({ ok: true, status: "done", balance: bal });
   }
 
   // Проверка транзакции (через Toncenter)
-  const res = await fetch("https://toncenter.com/api/v2/getTransactions?address=" + data.user_id, {
-    headers: { "X-API-Key": TONCENTER_KEY }
-  });
+  const res = await fetch(
+    `https://toncenter.com/api/v2/getTransactions?address=${TON_WALLET_ADDRESS}&limit=50`,
+    { headers: { "X-API-Key": TONCENTER_KEY } }
+  );
 
   const r = await res.json();
   if (!r.ok) return json({ error: "toncenter error" });
 
-  // Если нашли пополнение
-  if (r.result && r.result.transactions && r.result.transactions.length > 0) {
+  const txs = r.result?.transactions || [];
+
+  // ищем перевод от пользователя на наш кошелёк
+  const found = txs.find(t => {
+    const inMsg = t.in_msg;
+    if (!inMsg) return false;
+    const from = inMsg.source;
+    const value = parseFloat(inMsg.value) / 1e9;
+    return from === data.user_wallet && value >= data.amount;
+  });
+
+  if (found) {
     const bal = parseFloat(await BALANCE_KV.get(data.user_id) || 0);
     const newBal = bal + parseFloat(data.amount);
 
@@ -155,8 +167,8 @@ async function checkPayment(request) {
     data.status = "done";
     await PAYMENTS_KV.put(id, JSON.stringify(data));
 
-    return json({ ok: true, balance: newBal });
+    return json({ ok: true, status: "done", balance: newBal });
   }
 
   return json({ ok: false });
-}
+    }
