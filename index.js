@@ -76,23 +76,7 @@ export default {
       });
     }
 
-    // POST /add-ton
-    if (request.method === "POST" && path === "/add-ton") {
-      const body = await request.json();
-      const userId = body.user_id;
-      const amount = parseFloat(body.amount);
-
-      const currentBalance = parseFloat(await env.BALANCE_KV.get("balance_" + userId) || "0");
-      const newBalance = currentBalance + amount;
-
-      await env.BALANCE_KV.put("balance_" + userId, newBalance.toString());
-
-      return new Response(JSON.stringify({ balance: newBalance }), {
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
-    }
-
-    // POST /add-nft
+    // POST /add-nft (в inventory)
     if (request.method === "POST" && path === "/add-nft") {
       const body = await request.json();
       const userId = body.user_id;
@@ -109,7 +93,23 @@ export default {
       });
     }
 
-    // POST /sell-nft
+    // POST /sell-ton (продать TON из окна приза)
+    if (request.method === "POST" && path === "/sell-ton") {
+      const body = await request.json();
+      const userId = body.user_id;
+      const amount = parseFloat(body.amount);
+
+      const currentBalance = parseFloat(await env.BALANCE_KV.get("balance_" + userId) || "0");
+      const newBalance = currentBalance + amount;
+
+      await env.BALANCE_KV.put("balance_" + userId, newBalance.toString());
+
+      return new Response(JSON.stringify({ balance: newBalance }), {
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+
+    // POST /sell-nft (из inventory)
     if (request.method === "POST" && path === "/sell-nft") {
       const body = await request.json();
       const userId = body.user_id;
