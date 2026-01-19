@@ -11,9 +11,7 @@ export default {
     if (path === "/sell-nft") return sellNft(request, env)
     if (path === "/add-balance") return addBalance(request, env)
     if (path === "/admin/set-balance") return adminSetBalance(request, env)
-
-    if (path === "/deposit-request") return depositRequest(request, env)
-    if (path === "/check-payment") return checkPayment(request, env)
+    if (path === "/admin/reset-daily") return adminResetDaily(request, env)
 
     return new Response("Not found", { status: 404 })
   }
@@ -27,7 +25,7 @@ const json = data =>
     }
   })
 
-/* BALANCE */
+/* ================== BALANCE ================== */
 async function getBalance(url, env) {
   const user = url.searchParams.get("user")
   const bal = await env.BALANCE_KV.get(user) || "0"
@@ -42,7 +40,7 @@ async function addBalance(request, env) {
   return json({ ok: true, balance: newBal })
 }
 
-/* DAILY STATUS */
+/* ================== DAILY STATUS ================== */
 async function dailyStatus(url, env) {
   const user = url.searchParams.get("user")
   const last = await env.DAILY_KV.get(user)
@@ -58,7 +56,7 @@ async function dailyStatus(url, env) {
   return json({ ok: true, remaining, last: Number(last) })
 }
 
-/* DAILY */
+/* ================== DAILY ================== */
 async function daily(url, env) {
   const user = url.searchParams.get("user")
   if (!user) return json({ error: "no_user" })
@@ -74,7 +72,7 @@ async function daily(url, env) {
   return json({ ok: true })
 }
 
-/* INVENTORY */
+/* ================== INVENTORY ================== */
 async function inventory(url, env) {
   const user = url.searchParams.get("user")
   const inv = JSON.parse(await env.INVENTORY_KV.get(user) || "[]")
@@ -105,7 +103,7 @@ async function sellNft(request, env) {
   return json({ ok: true, balance: newBal, inventory: inv })
 }
 
-/* ADMIN SET BALANCE */
+/* ================== ADMIN SET BALANCE ================== */
 async function adminSetBalance(request, env) {
   const secret = request.headers.get("ADMIN_SECRET")
   if (secret !== env.ADMIN_SECRET) {
@@ -117,57 +115,14 @@ async function adminSetBalance(request, env) {
   return json({ ok: true, user, balance: ton })
 }
 
-/* DEPOSIT REQUEST */
-async function depositRequest(request, env) {
-  const { user, amount } = await request.json()
-  await env.DEPOSIT_KV.put(user, JSON.stringify({ amount, created: Date.now() }))
-  return json({ ok: true })
-}
-
-/* CHECK PAYMENT */
-async function checkPayment(request, env) {
-  const { user } = await request.json()
-
-  const depRaw = await env.DEPOSIT_KV.get(user)
-  if (!depRaw) return json({ error: "no_deposit" })
-
-  const dep = JSON.parse(depRaw)
-  const amount = Number(dep.amount)
-
-  const address = env.TON_ADDRESS
-  const apiKey = env.TONCENTER_API_KEY
-
-  const url =
-    `https://toncenter.com/api/v2/getTransactions?address=${address}&limit=20&api_key=${apiKey}`
-
-  const res = await fetch(url)
-  const data = await res.json()
-
-  if (!data.ok) return json({ error: "api_error" })
-
-  const txs = data.result
-  let found = null
-
-  for (const tx of txs) {
-    if (tx.in_msg && tx.in_msg.value) {
-      const value = Number(tx.in_msg.value) / 1e9
-      if (value === amount) {
-        found = tx.in_msg
-        break
-      }
-    }
+/* ================== ADMIN RESET DAILY ================== */
+async function adminResetDaily(request, env) {
+  const secret = request.headers.get("ADMIN_SECRET")
+  if (secret !== env.ADMIN_SECRET) {
+    return new Response("Forbidden", { status: 403 })
   }
 
-  if (!found) return json({ ok: false, message: "not_found" })
-
-  const txHash = found.hash
-  const already = await env.CREDITED_KV.get(txHash)
-  if (already) return json({ ok: false, message: "already_credited" })
-
-  const bal = Number(await env.BALANCE_KV.get(user) || 0)
-  const newBal = bal + amount
-  await env.BALANCE_KV.put(user, String(newBal))
-  await env.CREDITED_KV.put(txHash, "1")
-
-  return json({ ok: true, balance: newBal })
-      }
+  const { user } = await request.json()
+  await env.DAILY_KV.delete(user)
+  return json({ ok: true, user })
+}
